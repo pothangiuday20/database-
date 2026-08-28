@@ -1,0 +1,2802 @@
+====================================================================
+      WEEK-4: BOOKFLOW INTELLIGENT CATALOG & API BLUEPRINT
+====================================================================
+The Intelligent Catalog & API Blueprint Scenario Users are complaining 
+that the library’s search is too "dumb." If they search for "Stories about 
+space," they want to see books like The Martian or Dune, even if the word 
+"space" isn't in the title. Additionally, the frontend team needs a clear 
+"contract" (API Blueprint) so they can start building the search interface 
+while you finish the backend. Task to be Done 1. Semantic Search Setup 
+(Vector): * In your PostgreSQL bookflow_db, enable the pgvector extension.
+ o Add a new column called embedding of type VECTOR(3) (keeping it simple for 
+lab purposes) to your Books table. 2. Similarity Querying: o Manually insert 
+"mock" vectors (e.g., [0.1, 0.8, 0.2]) representing book themes. o Use the <-> 
+(L2 Distance) or <=> (Cosine Similarity) operator to find the 3 books "closest"
+ to a search vector provided by the instructor. 3. OpenAPI Specification 
+(The Contract): o Instead of writing code, use an editor
+ (like Swagger Editor or Stoplight) to design a RESTful API Spec 
+for the search endpoint. o Endpoint: GET /v1/books/search o 
+Requirement: Include query parameters for q (text search) 
+and limit. Define a successful 200 OK response schema and 
+a 400 Bad Request error envelope. 4. Verifying REST Constraints: 
+o Ensure your API design follows Statelessness (no session data) 
+and uses proper HTTP Verbs (GET for fetching, POST for creating).
+====================================================================
+                                SOLUTION
+====================================================================
+TECHNOLOGIES USED
+------------------
+
+Database       : MySQL
+Database Tool  : MySQL Workbench
+API Contract   : Swagger Editor
+API Testing    : Postman
+Backend        : Node.js + Express
+Editor         : VS Code / Notepad
+
+DATABASE
+--------
+
+Database name:
+
+    bookflow_db
+
+Table:
+
+    Books
+
+
+====================================================================
+SCENARIO
+====================================================================
+
+The library search is currently "dumb".
+
+For example, if a user searches:
+
+    Stories about space
+
+the system should return books such as:
+
+    The Martian
+    Dune
+    Foundation
+
+even when the search phrase does not exactly occur in the
+book title.
+
+For the laboratory, we represent book themes using
+three-dimensional MOCK vectors.
+
+Example:
+
+    [0.90, 0.80, 0.20]
+
+These are demonstration vectors only.
+
+A real semantic-search system would generate vectors using
+an embedding model.
+
+
+====================================================================
+IMPORTANT MYSQL NOTE
+====================================================================
+
+The original assignment mentions:
+
+    VECTOR(3)
+
+and:
+
+    <->
+
+    <=>
+
+These are associated with PostgreSQL/pgvector-style syntax.
+
+MySQL Workbench cannot execute PostgreSQL pgvector commands.
+
+Therefore, this MySQL practical uses:
+
+    JSON
+
+to store:
+
+    [x, y, z]
+
+and calculates:
+
+    L2 Distance
+
+and:
+
+    Cosine Similarity
+
+using normal MySQL mathematical functions.
+
+Therefore DO NOT execute this in MySQL:
+
+    embedding VECTOR(3)
+
+    embedding <-> '[0.1,0.8,0.2]'
+
+    embedding <=> '[0.1,0.8,0.2]'
+
+Those are not the MySQL solution used in this practical.
+
+
+====================================================================
+PART 1 – OPEN MYSQL WORKBENCH
+====================================================================
+
+STEP 1
+------
+
+Open:
+
+    MySQL Workbench
+
+
+STEP 2
+------
+
+Open a new SQL tab:
+
+    File
+       |
+       +---- New Query Tab
+
+
+STEP 3
+------
+
+We will execute the SQL queries in the following order:
+
+    1. Create database
+    2. Create Books table
+    3. Insert books
+    4. Add embedding column
+    5. Insert mock vectors
+    6. Verify vectors
+    7. Perform L2 search
+    8. Perform cosine search
+
+
+====================================================================
+PART 2 – CREATE DATABASE
+====================================================================
+
+SQL QUERY:
+
+DROP DATABASE IF EXISTS bookflow_db;
+
+CREATE DATABASE bookflow_db;
+
+USE bookflow_db;
+
+
+EXECUTION:
+
+1. Copy the above SQL.
+2. Paste into MySQL Workbench.
+3. Click the lightning/Execute button.
+
+
+EXPECTED OUTPUT:
+
+    Query OK, 0 rows affected
+
+    Query OK, 1 row affected
+
+    Database changed
+
+
+CHECK DATABASE:
+
+SQL:
+
+SELECT DATABASE();
+
+
+EXPECTED OUTPUT:
+
++--------------+
+| DATABASE()   |
++--------------+
+| bookflow_db  |
++--------------+
+
+
+====================================================================
+PART 3 – CREATE BOOKS TABLE
+====================================================================
+
+SQL:
+
+CREATE TABLE Books
+(
+    book_id INT AUTO_INCREMENT PRIMARY KEY,
+
+    title VARCHAR(200) NOT NULL,
+
+    author VARCHAR(150) NOT NULL,
+
+    genre VARCHAR(100),
+
+    description TEXT,
+
+    published_year INT
+);
+
+
+EXPECTED OUTPUT:
+
+    Query OK, 0 rows affected
+
+
+CHECK TABLE:
+
+SQL:
+
+DESCRIBE Books;
+
+
+EXPECTED OUTPUT:
+
++----------------+--------------+------+-----+---------+----------------+
+| Field          | Type         | Null | Key | Default | Extra          |
++----------------+--------------+------+-----+---------+----------------+
+| book_id        | int          | NO   | PRI | NULL    | auto_increment |
+| title          | varchar(200) | NO   |     | NULL    |                |
+| author         | varchar(150) | NO   |     | NULL    |                |
+| genre          | varchar(100) | YES  |     | NULL    |                |
+| description    | text         | YES  |     | NULL    |                |
+| published_year | int          | YES  |     | NULL    |                |
++----------------+--------------+------+-----+---------+----------------+
+
+
+====================================================================
+PART 4 – INSERT BOOK DATA
+====================================================================
+
+SQL:
+
+INSERT INTO Books
+(
+    title,
+    author,
+    genre,
+    description,
+    published_year
+)
+VALUES
+
+(
+    'The Martian',
+    'Andy Weir',
+    'Science Fiction',
+    'An astronaut struggles to survive alone on Mars.',
+    2011
+),
+
+(
+    'Dune',
+    'Frank Herbert',
+    'Science Fiction',
+    'A story involving planets, politics, survival and space.',
+    1965
+),
+
+(
+    'The Hitchhikers Guide to the Galaxy',
+    'Douglas Adams',
+    'Science Fiction',
+    'A humorous adventure across space and alien worlds.',
+    1979
+),
+
+(
+    'Pride and Prejudice',
+    'Jane Austen',
+    'Romance',
+    'A classic story about relationships and social expectations.',
+    1813
+),
+
+(
+    'The Great Gatsby',
+    'F. Scott Fitzgerald',
+    'Classic',
+    'A story of ambition, wealth, love and the American dream.',
+    1925
+),
+
+(
+    'Foundation',
+    'Isaac Asimov',
+    'Science Fiction',
+    'A futuristic story about mathematics, civilization and space.',
+    1951
+),
+
+(
+    'The Hobbit',
+    'J.R.R. Tolkien',
+    'Fantasy',
+    'A fantasy adventure involving Bilbo Baggins and a dangerous journey.',
+    1937
+),
+
+(
+    'Enders Game',
+    'Orson Scott Card',
+    'Science Fiction',
+    'A young student is trained for an interstellar conflict.',
+    1985
+),
+
+(
+    'Harry Potter and the Sorcerers Stone',
+    'J.K. Rowling',
+    'Fantasy',
+    'A young wizard begins his magical education.',
+    1997
+),
+
+(
+    'Twenty Thousand Leagues Under the Seas',
+    'Jules Verne',
+    'Adventure',
+    'A fantastic underwater adventure aboard a mysterious submarine.',
+    1870
+);
+
+
+EXPECTED OUTPUT:
+
+    Query OK, 10 rows affected
+
+    Records: 10
+
+    Duplicates: 0
+
+    Warnings: 0
+
+
+====================================================================
+PART 5 – DISPLAY BOOKS
+====================================================================
+
+SQL:
+
+SELECT
+    book_id,
+    title,
+    author,
+    genre,
+    published_year
+FROM Books
+ORDER BY book_id;
+
+
+EXPECTED OUTPUT:
+
++---------+--------------------------------------+---------------------+------------------+----------------+
+| book_id | title                                | author              | genre            | published_year |
++---------+--------------------------------------+---------------------+------------------+----------------+
+| 1       | The Martian                          | Andy Weir           | Science Fiction  | 2011           |
+| 2       | Dune                                 | Frank Herbert       | Science Fiction  | 1965           |
+| 3       | The Hitchhikers Guide to the Galaxy  | Douglas Adams       | Science Fiction  | 1979           |
+| 4       | Pride and Prejudice                  | Jane Austen         | Romance          | 1813           |
+| 5       | The Great Gatsby                     | F. Scott Fitzgerald | Classic          | 1925           |
+| 6       | Foundation                           | Isaac Asimov        | Science Fiction  | 1951           |
+| 7       | The Hobbit                           | J.R.R. Tolkien      | Fantasy          | 1937           |
+| 8       | Enders Game                          | Orson Scott Card    | Science Fiction  | 1985           |
+| 9       | Harry Potter and the Sorcerers Stone | J.K. Rowling        | Fantasy          | 1997           |
+| 10      | Twenty Thousand Leagues Under the Seas| Jules Verne         | Adventure        | 1870           |
++---------+--------------------------------------+---------------------+------------------+----------------+
+
+
+====================================================================
+PART 6 – ADD EMBEDDING COLUMN
+====================================================================
+
+We now add a column for our three-dimensional mock vector.
+
+SQL:
+
+ALTER TABLE Books
+ADD COLUMN embedding JSON;
+
+
+EXPECTED OUTPUT:
+
+    Query OK, 0 rows affected
+
+
+CHECK:
+
+SQL:
+
+DESCRIBE Books;
+
+
+EXPECTED OUTPUT:
+
+The last column should be:
+
+    embedding    json    YES
+
+
+====================================================================
+PART 7 – INSERT MOCK VECTORS
+====================================================================
+
+VECTOR MEANING
+--------------
+
+For this laboratory:
+
+    First value  = Space / Science
+    Second value = Adventure / Survival
+    Third value  = Fantasy / Fiction
+
+
+The values are MOCK values.
+
+They are not generated by a real AI embedding model.
+
+
+--------------------------------------------------------------------
+BOOK 1 – THE MARTIAN
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.90, 0.80, 0.20)
+WHERE book_id = 1;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 2 – DUNE
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.85, 0.75, 0.25)
+WHERE book_id = 2;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 3 – HITCHHIKERS GUIDE
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.80, 0.70, 0.30)
+WHERE book_id = 3;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 4 – PRIDE AND PREJUDICE
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.10, 0.20, 0.90)
+WHERE book_id = 4;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 5 – GREAT GATSBY
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.15, 0.30, 0.80)
+WHERE book_id = 5;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 6 – FOUNDATION
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.95, 0.65, 0.20)
+WHERE book_id = 6;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 7 – THE HOBBIT
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.30, 0.75, 0.90)
+WHERE book_id = 7;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 8 – ENDERS GAME
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.88, 0.85, 0.15)
+WHERE book_id = 8;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 9 – HARRY POTTER
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.20, 0.55, 0.95)
+WHERE book_id = 9;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+--------------------------------------------------------------------
+BOOK 10 – TWENTY THOUSAND LEAGUES
+--------------------------------------------------------------------
+
+SQL:
+
+UPDATE Books
+SET embedding = JSON_ARRAY(0.70, 0.90, 0.40)
+WHERE book_id = 10;
+
+
+OUTPUT:
+
+    Query OK, 1 row affected
+
+
+====================================================================
+PART 8 – VERIFY ALL VECTORS
+====================================================================
+
+SQL:
+
+SELECT
+    book_id,
+    title,
+    embedding
+FROM Books
+ORDER BY book_id;
+
+
+EXPECTED OUTPUT:
+
++---------+--------------------------------------+-------------------+
+| book_id | title                                | embedding         |
++---------+--------------------------------------+-------------------+
+| 1       | The Martian                          | [0.9, 0.8, 0.2]  |
+| 2       | Dune                                 | [0.85, 0.75, 0.25]|
+| 3       | The Hitchhikers Guide to the Galaxy  | [0.8, 0.7, 0.3]  |
+| 4       | Pride and Prejudice                  | [0.1, 0.2, 0.9]  |
+| 5       | The Great Gatsby                     | [0.15, 0.3, 0.8] |
+| 6       | Foundation                           | [0.95, 0.65, 0.2]|
+| 7       | The Hobbit                            | [0.3, 0.75, 0.9] |
+| 8       | Enders Game                          | [0.88, 0.85, 0.15]|
+| 9       | Harry Potter and the Sorcerers Stone | [0.2, 0.55, 0.95]|
+| 10      | Twenty Thousand Leagues Under the Seas| [0.7, 0.9, 0.4] |
++---------+--------------------------------------+-------------------+
+
+
+====================================================================
+PART 9 – SEARCH VECTOR
+====================================================================
+
+The instructor provides a search vector.
+
+For this practical we use:
+
+    [0.90, 0.80, 0.20]
+
+This represents:
+
+    Stories about space
+
+
+====================================================================
+PART 10 – L2 DISTANCE
+====================================================================
+
+L2 formula:
+
+    Distance =
+    SQRT(
+        (x1-x2)^2 +
+        (y1-y2)^2 +
+        (z1-z2)^2
+    )
+
+
+IMPORTANT:
+
+    Smaller distance = more similar.
+
+
+SQL:
+
+SELECT
+
+    book_id,
+
+    title,
+
+    author,
+
+    genre,
+
+    ROUND(
+
+        SQRT(
+
+            POW(
+                CAST(
+                    JSON_EXTRACT(embedding, '$[0]')
+                    AS DECIMAL(10,6)
+                ) - 0.90,
+                2
+            )
+
+            +
+
+            POW(
+                CAST(
+                    JSON_EXTRACT(embedding, '$[1]')
+                    AS DECIMAL(10,6)
+                ) - 0.80,
+                2
+            )
+
+            +
+
+            POW(
+                CAST(
+                    JSON_EXTRACT(embedding, '$[2]')
+                    AS DECIMAL(10,6)
+                ) - 0.20,
+                2
+            )
+
+        ),
+
+        4
+
+    ) AS l2_distance
+
+FROM Books
+
+WHERE embedding IS NOT NULL
+
+ORDER BY l2_distance ASC
+
+LIMIT 3;
+
+
+EXPECTED OUTPUT:
+
++---------+------------------+------------------+------------------+-------------+
+| book_id | title            | author           | genre            | l2_distance |
++---------+------------------+------------------+------------------+-------------+
+| 1       | The Martian      | Andy Weir        | Science Fiction  | 0.0000      |
+| 8       | Enders Game      | Orson Scott Card | Science Fiction  | 0.0860      |
+| 2       | Dune             | Frank Herbert    | Science Fiction  | 0.0866      |
++---------+------------------+------------------+------------------+-------------+
+
+
+CONCLUSION:
+
+The 3 closest books are:
+
+    1. The Martian
+    2. Enders Game
+    3. Dune
+
+
+====================================================================
+PART 11 – COSINE SIMILARITY
+====================================================================
+
+Cosine similarity measures the angle between two vectors.
+
+Formula:
+
+             A . B
+    -----------------------
+    |A| x |B|
+
+
+Higher value = more similar.
+
+
+SQL:
+
+SELECT
+
+    book_id,
+
+    title,
+
+    author,
+
+    genre,
+
+    ROUND(
+
+        (
+
+            CAST(
+                JSON_EXTRACT(embedding, '$[0]')
+                AS DECIMAL(10,6)
+            ) * 0.90
+
+            +
+
+            CAST(
+                JSON_EXTRACT(embedding, '$[1]')
+                AS DECIMAL(10,6)
+            ) * 0.80
+
+            +
+
+            CAST(
+                JSON_EXTRACT(embedding, '$[2]')
+                AS DECIMAL(10,6)
+            ) * 0.20
+
+        )
+
+        /
+
+        (
+
+            SQRT(
+
+                POW(
+                    CAST(
+                        JSON_EXTRACT(embedding, '$[0]')
+                        AS DECIMAL(10,6)
+                    ),
+                    2
+                )
+
+                +
+
+                POW(
+                    CAST(
+                        JSON_EXTRACT(embedding, '$[1]')
+                        AS DECIMAL(10,6)
+                    ),
+                    2
+                )
+
+                +
+
+                POW(
+                    CAST(
+                        JSON_EXTRACT(embedding, '$[2]')
+                        AS DECIMAL(10,6)
+                    ),
+                    2
+                )
+
+            )
+
+            *
+
+            SQRT(
+
+                POW(0.90, 2)
+
+                +
+
+                POW(0.80, 2)
+
+                +
+
+                POW(0.20, 2)
+
+            )
+
+        ),
+
+        4
+
+    ) AS cosine_similarity
+
+FROM Books
+
+WHERE embedding IS NOT NULL
+
+ORDER BY cosine_similarity DESC
+
+LIMIT 3;
+
+
+EXPECTED OUTPUT:
+
++---------+------------------+------------------+------------------+-------------------+
+| book_id | title            | author           | genre            | cosine_similarity |
++---------+------------------+------------------+------------------+-------------------+
+| 1       | The Martian      | Andy Weir        | Science Fiction  | 1.0000            |
+| 8       | Enders Game      | Orson Scott Card | Science Fiction  | 0.9980            |
+| 2       | Dune             | Frank Herbert    | Science Fiction  | 0.9976            |
++---------+------------------+------------------+------------------+-------------------+
+
+
+CONCLUSION:
+
+Higher cosine similarity means greater similarity.
+
+
+====================================================================
+PART 12 – CREATE API BACKEND
+====================================================================
+
+Create folder:
+
+    BookFlow_API
+
+
+Inside it create:
+
+    package.json
+    server.js
+
+
+====================================================================
+FILE: package.json
+====================================================================
+
+Paste:
+
+{
+  "name": "bookflow-api",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "mysql2": "^3.14.3"
+  }
+}
+
+
+====================================================================
+STEP 13 – INSTALL PACKAGES
+====================================================================
+
+Open VS Code Terminal.
+
+Navigate to:
+
+    BookFlow_API
+
+
+Execute:
+
+    npm install
+
+
+EXPECTED:
+
+    added packages
+
+    audited packages
+
+    found 0 vulnerabilities
+
+
+====================================================================
+FILE: server.js
+====================================================================
+
+IMPORTANT:
+
+Replace:
+
+    YOUR_MYSQL_PASSWORD
+
+with your actual MySQL root password.
+
+
+CODE:
+
+const express = require("express");
+
+const mysql = require("mysql2/promise");
+
+const app = express();
+
+const PORT = 3000;
+
+app.use(express.json());
+
+
+const pool = mysql.createPool({
+
+    host: "localhost",
+
+    user: "root",
+
+    password: "YOUR_MYSQL_PASSWORD",
+
+    database: "bookflow_db",
+
+    waitForConnections: true,
+
+    connectionLimit: 10,
+
+    queueLimit: 0
+
+});
+
+
+app.get("/", (req, res) => {
+
+    res.json({
+
+        message: "BookFlow Intelligent Catalog API",
+
+        status: "Running",
+
+        endpoints: {
+
+            search: "GET /v1/books/search",
+
+            createBook: "POST /v1/books"
+
+        }
+
+    });
+
+});
+
+
+app.get("/v1/books/search", async (req, res) => {
+
+    try {
+
+        const q = req.query.q;
+
+        const limit = parseInt(req.query.limit || "10");
+
+
+        if (!q || q.trim() === "") {
+
+            return res.status(400).json({
+
+                error: {
+
+                    code: "INVALID_QUERY",
+
+                    message:
+                    "Query parameter q is required."
+
+                }
+
+            });
+
+        }
+
+
+        if (
+            isNaN(limit) ||
+            limit < 1 ||
+            limit > 50
+        ) {
+
+            return res.status(400).json({
+
+                error: {
+
+                    code: "INVALID_LIMIT",
+
+                    message:
+                    "limit must be between 1 and 50."
+
+                }
+
+            });
+
+        }
+
+
+        /*
+          MOCK QUERY VECTOR
+
+          Stories about space
+
+          [0.90, 0.80, 0.20]
+        */
+
+        const x = 0.90;
+
+        const y = 0.80;
+
+        const z = 0.20;
+
+
+        const sql = `
+
+        SELECT
+
+            book_id,
+
+            title,
+
+            author,
+
+            genre,
+
+            description,
+
+            published_year,
+
+            ROUND(
+
+                (
+
+                    CAST(
+                        JSON_EXTRACT(
+                            embedding,
+                            '$[0]'
+                        )
+                        AS DECIMAL(10,6)
+                    ) * ?
+
+                    +
+
+                    CAST(
+                        JSON_EXTRACT(
+                            embedding,
+                            '$[1]'
+                        )
+                        AS DECIMAL(10,6)
+                    ) * ?
+
+                    +
+
+                    CAST(
+                        JSON_EXTRACT(
+                            embedding,
+                            '$[2]'
+                        )
+                        AS DECIMAL(10,6)
+                    ) * ?
+
+                )
+
+                /
+
+                (
+
+                    SQRT(
+
+                        POW(
+                            CAST(
+                                JSON_EXTRACT(
+                                    embedding,
+                                    '$[0]'
+                                )
+                                AS DECIMAL(10,6)
+                            ),
+                            2
+                        )
+
+                        +
+
+                        POW(
+                            CAST(
+                                JSON_EXTRACT(
+                                    embedding,
+                                    '$[1]'
+                                )
+                                AS DECIMAL(10,6)
+                            ),
+                            2
+                        )
+
+                        +
+
+                        POW(
+                            CAST(
+                                JSON_EXTRACT(
+                                    embedding,
+                                    '$[2]'
+                                )
+                                AS DECIMAL(10,6)
+                            ),
+                            2
+                        )
+
+                    )
+
+                    *
+
+                    SQRT(
+
+                        POW(?, 2)
+
+                        +
+
+                        POW(?, 2)
+
+                        +
+
+                        POW(?, 2)
+
+                    )
+
+                ),
+
+                4
+
+            ) AS similarity
+
+        FROM Books
+
+        WHERE embedding IS NOT NULL
+
+        ORDER BY similarity DESC
+
+        LIMIT ?
+
+        `;
+
+
+        const [rows] = await pool.execute(
+
+            sql,
+
+            [
+                x,
+                y,
+                z,
+                x,
+                y,
+                z,
+                limit
+            ]
+
+        );
+
+
+        res.status(200).json({
+
+            query: q,
+
+            count: rows.length,
+
+            results: rows
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+
+            error: {
+
+                code:
+                "INTERNAL_SERVER_ERROR",
+
+                message:
+                "Unable to perform book search."
+
+            }
+
+        });
+
+    }
+
+});
+
+
+app.post("/v1/books", async (req, res) => {
+
+    try {
+
+        const {
+
+            title,
+
+            author,
+
+            genre,
+
+            description,
+
+            published_year,
+
+            embedding
+
+        } = req.body;
+
+
+        if (!title || !author || !genre) {
+
+            return res.status(400).json({
+
+                error: {
+
+                    code:
+                    "INVALID_BOOK",
+
+                    message:
+                    "title, author and genre are required."
+
+                }
+
+            });
+
+        }
+
+
+        const sql = `
+
+        INSERT INTO Books
+
+        (
+
+            title,
+
+            author,
+
+            genre,
+
+            description,
+
+            published_year,
+
+            embedding
+
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?)
+
+        `;
+
+
+        const [result] = await pool.execute(
+
+            sql,
+
+            [
+
+                title,
+
+                author,
+
+                genre,
+
+                description || null,
+
+                published_year || null,
+
+                embedding
+                    ? JSON.stringify(embedding)
+                    : null
+
+            ]
+
+        );
+
+
+        res.status(201).json({
+
+            message:
+            "Book created successfully",
+
+            book: {
+
+                book_id:
+                result.insertId,
+
+                title,
+
+                author,
+
+                genre,
+
+                description:
+                description || null,
+
+                published_year:
+                published_year || null,
+
+                embedding:
+                embedding || null
+
+            }
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+
+            error: {
+
+                code:
+                "INTERNAL_SERVER_ERROR",
+
+                message:
+                "Unable to create book."
+
+            }
+
+        });
+
+    }
+
+});
+
+
+app.listen(PORT, () => {
+
+    console.log(
+        "BookFlow API running at http://localhost:3000"
+    );
+
+});
+
+
+====================================================================
+PART 13 – START NODE.JS SERVER
+====================================================================
+
+Open VS Code Terminal.
+
+Execute:
+
+    node server.js
+
+
+EXPECTED OUTPUT:
+
+    BookFlow API running at http://localhost:3000
+
+
+KEEP THIS TERMINAL RUNNING.
+
+DO NOT CLOSE IT.
+
+
+====================================================================
+PART 14 – TEST API IN BROWSER
+====================================================================
+
+Open browser.
+
+Enter:
+
+    http://localhost:3000/
+
+
+EXPECTED OUTPUT:
+
+{
+    "message": "BookFlow Intelligent Catalog API",
+    "status": "Running",
+    "endpoints": {
+        "search": "GET /v1/books/search",
+        "createBook": "POST /v1/books"
+    }
+}
+
+
+====================================================================
+PART 15 – SWAGGER EDITOR
+====================================================================
+
+Open:
+
+    https://editor.swagger.io/
+
+
+Swagger Editor has:
+
+    LEFT SIDE
+        OpenAPI YAML
+
+    RIGHT SIDE
+        API documentation
+
+
+Delete the default YAML.
+
+Paste the following YAML.
+
+
+====================================================================
+OPENAPI YAML
+====================================================================
+
+openapi: 3.0.3
+
+info:
+
+  title: BookFlow Intelligent Catalog API
+
+  version: 1.0.0
+
+  description: |
+    REST API for semantic book search.
+
+    The API searches books using mock
+    three-dimensional vectors stored in MySQL.
+
+
+servers:
+
+  - url: http://localhost:3000
+
+
+tags:
+
+  - name: Books
+
+    description: Book operations
+
+
+paths:
+
+
+  /v1/books/search:
+
+    get:
+
+      tags:
+
+        - Books
+
+      summary:
+        Search books using semantic similarity
+
+
+      parameters:
+
+
+        - name: q
+
+          in: query
+
+          required: true
+
+          description:
+            Natural language search query
+
+          schema:
+
+            type: string
+
+            minLength: 1
+
+          example:
+            Stories about space
+
+
+        - name: limit
+
+          in: query
+
+          required: false
+
+          description:
+            Maximum number of results
+
+          schema:
+
+            type: integer
+
+            minimum: 1
+
+            maximum: 50
+
+            default: 10
+
+          example:
+            3
+
+
+      responses:
+
+
+        '200':
+
+          description:
+            Successful search
+
+
+          content:
+
+            application/json:
+
+              schema:
+
+                $ref:
+                  '#/components/schemas/SearchResponse'
+
+
+              example:
+
+                query:
+                  Stories about space
+
+                count:
+                  3
+
+                results:
+
+                  - book_id:
+                      1
+
+                    title:
+                      The Martian
+
+                    author:
+                      Andy Weir
+
+                    genre:
+                      Science Fiction
+
+                    description:
+                      An astronaut struggles to survive alone on Mars.
+
+                    published_year:
+                      2011
+
+                    similarity:
+                      1.0000
+
+
+                  - book_id:
+                      8
+
+                    title:
+                      Enders Game
+
+                    author:
+                      Orson Scott Card
+
+                    genre:
+                      Science Fiction
+
+                    description:
+                      A young student is trained for an interstellar conflict.
+
+                    published_year:
+                      1985
+
+                    similarity:
+                      0.9980
+
+
+                  - book_id:
+                      2
+
+                    title:
+                      Dune
+
+                    author:
+                      Frank Herbert
+
+                    genre:
+                      Science Fiction
+
+                    description:
+                      A story involving planets, politics, survival and space.
+
+                    published_year:
+                      1965
+
+                    similarity:
+                      0.9976
+
+
+        '400':
+
+          description:
+            Bad Request
+
+
+          content:
+
+            application/json:
+
+              schema:
+
+                $ref:
+                  '#/components/schemas/ErrorResponse'
+
+
+              example:
+
+                error:
+
+                  code:
+                    INVALID_QUERY
+
+                  message:
+                    Query parameter q is required.
+
+
+  /v1/books:
+
+    post:
+
+      tags:
+
+        - Books
+
+      summary:
+        Create a new book
+
+
+      requestBody:
+
+        required: true
+
+        content:
+
+          application/json:
+
+            schema:
+
+              $ref:
+                '#/components/schemas/CreateBookRequest'
+
+
+            example:
+
+              title:
+                Project Hail Mary
+
+              author:
+                Andy Weir
+
+              genre:
+                Science Fiction
+
+              description:
+                A science fiction survival story involving space.
+
+              published_year:
+                2021
+
+              embedding:
+
+                - 0.93
+
+                - 0.82
+
+                - 0.12
+
+
+      responses:
+
+
+        '201':
+
+          description:
+            Book created successfully
+
+
+        '400':
+
+          description:
+            Bad Request
+
+
+          content:
+
+            application/json:
+
+              schema:
+
+                $ref:
+                  '#/components/schemas/ErrorResponse'
+
+
+components:
+
+
+  schemas:
+
+
+    Book:
+
+      type: object
+
+      properties:
+
+        book_id:
+
+          type: integer
+
+
+        title:
+
+          type: string
+
+
+        author:
+
+          type: string
+
+
+        genre:
+
+          type: string
+
+
+        description:
+
+          type: string
+
+
+        published_year:
+
+          type: integer
+
+
+        similarity:
+
+          type: number
+
+          format: float
+
+
+    SearchResponse:
+
+      type: object
+
+      properties:
+
+        query:
+
+          type: string
+
+
+        count:
+
+          type: integer
+
+
+        results:
+
+          type: array
+
+          items:
+
+            $ref:
+              '#/components/schemas/Book'
+
+
+    CreateBookRequest:
+
+      type: object
+
+      required:
+
+        - title
+
+        - author
+
+        - genre
+
+
+      properties:
+
+        title:
+
+          type: string
+
+
+        author:
+
+          type: string
+
+
+        genre:
+
+          type: string
+
+
+        description:
+
+          type: string
+
+
+        published_year:
+
+          type: integer
+
+
+        embedding:
+
+          type: array
+
+          minItems: 3
+
+          maxItems: 3
+
+          items:
+
+            type: number
+
+
+    ErrorResponse:
+
+      type: object
+
+      properties:
+
+        error:
+
+          type: object
+
+          properties:
+
+            code:
+
+              type: string
+
+
+            message:
+
+              type: string
+
+
+====================================================================
+PART 16 – SWAGGER EDITOR OUTPUT
+====================================================================
+
+After pasting the YAML, the right side should display:
+
+    BookFlow Intelligent Catalog API
+
+
+Then:
+
+    Books
+
+
+Under Books:
+
+    GET /v1/books/search
+
+    POST /v1/books
+
+
+There should be NO red YAML validation error.
+
+
+====================================================================
+PART 17 – SWAGGER TEST GET
+====================================================================
+
+In Swagger Editor:
+
+    GET /v1/books/search
+
+
+Click:
+
+    Try it out
+
+
+Enter:
+
+    q
+
+Value:
+
+    Stories about space
+
+
+Enter:
+
+    limit
+
+Value:
+
+    3
+
+
+Click:
+
+    Execute
+
+
+Swagger sends:
+
+GET
+
+http://localhost:3000/v1/books/search?q=Stories%20about%20space&limit=3
+
+
+EXPECTED HTTP STATUS:
+
+    200
+
+
+EXPECTED RESPONSE:
+
+{
+    "query": "Stories about space",
+
+    "count": 3,
+
+    "results": [
+
+        {
+            "book_id": 1,
+            "title": "The Martian",
+            "author": "Andy Weir",
+            "genre": "Science Fiction",
+            "similarity": 1
+        },
+
+        {
+            "book_id": 8,
+            "title": "Enders Game",
+            "author": "Orson Scott Card",
+            "genre": "Science Fiction",
+            "similarity": 0.998
+        },
+
+        {
+            "book_id": 2,
+            "title": "Dune",
+            "author": "Frank Herbert",
+            "genre": "Science Fiction",
+            "similarity": 0.9976
+        }
+
+    ]
+}
+
+
+====================================================================
+PART 18 – SWAGGER TEST 400 ERROR
+====================================================================
+
+GET:
+
+    /v1/books/search
+
+
+Click:
+
+    Try it out
+
+
+Do NOT enter:
+
+    q
+
+
+Enter:
+
+    limit = 3
+
+
+Click:
+
+    Execute
+
+
+EXPECTED:
+
+    400 Bad Request
+
+
+RESPONSE:
+
+{
+    "error": {
+
+        "code": "INVALID_QUERY",
+
+        "message":
+        "Query parameter q is required."
+
+    }
+}
+
+
+====================================================================
+PART 19 – SWAGGER TEST POST
+====================================================================
+
+Select:
+
+    POST /v1/books
+
+
+Click:
+
+    Try it out
+
+
+Enter:
+
+{
+    "title": "Project Hail Mary",
+
+    "author": "Andy Weir",
+
+    "genre": "Science Fiction",
+
+    "description":
+    "A science fiction survival story involving space.",
+
+    "published_year": 2021,
+
+    "embedding":
+    [
+        0.93,
+        0.82,
+        0.12
+    ]
+}
+
+
+Click:
+
+    Execute
+
+
+EXPECTED:
+
+    201 Created
+
+
+RESPONSE:
+
+{
+    "message":
+    "Book created successfully",
+
+    "book": {
+
+        "book_id": 11,
+
+        "title":
+        "Project Hail Mary",
+
+        "author":
+        "Andy Weir",
+
+        "genre":
+        "Science Fiction",
+
+        "description":
+        "A science fiction survival story involving space.",
+
+        "published_year":
+        2021,
+
+        "embedding":
+        [
+            0.93,
+            0.82,
+            0.12
+        ]
+
+    }
+}
+
+
+====================================================================
+PART 20 – POSTMAN TESTING
+====================================================================
+
+Open Postman.
+
+
+TEST 1 – API STATUS
+-------------------
+
+Method:
+
+    GET
+
+URL:
+
+    http://localhost:3000/
+
+
+Expected:
+
+    200 OK
+
+
+--------------------------------------------------------------------
+TEST 2 – SEMANTIC SEARCH
+--------------------------------------------------------------------
+
+Method:
+
+    GET
+
+URL:
+
+http://localhost:3000/v1/books/search?q=Stories%20about%20space&limit=3
+
+
+Expected:
+
+    200 OK
+
+
+Expected top 3:
+
+    1. The Martian
+    2. Enders Game
+    3. Dune
+
+
+--------------------------------------------------------------------
+TEST 3 – MISSING q
+--------------------------------------------------------------------
+
+Method:
+
+    GET
+
+URL:
+
+http://localhost:3000/v1/books/search?limit=3
+
+
+Expected:
+
+    400 Bad Request
+
+
+Response:
+
+{
+    "error": {
+
+        "code":
+        "INVALID_QUERY",
+
+        "message":
+        "Query parameter q is required."
+
+    }
+}
+
+
+--------------------------------------------------------------------
+TEST 4 – INVALID LIMIT
+--------------------------------------------------------------------
+
+Method:
+
+    GET
+
+URL:
+
+http://localhost:3000/v1/books/search?q=space&limit=100
+
+
+Expected:
+
+    400 Bad Request
+
+
+Response:
+
+{
+    "error": {
+
+        "code":
+        "INVALID_LIMIT",
+
+        "message":
+        "limit must be between 1 and 50."
+
+    }
+}
+
+
+--------------------------------------------------------------------
+TEST 5 – CREATE BOOK
+--------------------------------------------------------------------
+
+Method:
+
+    POST
+
+URL:
+
+    http://localhost:3000/v1/books
+
+
+Body:
+
+    raw
+    JSON
+
+
+Enter:
+
+{
+    "title": "Project Hail Mary",
+
+    "author": "Andy Weir",
+
+    "genre": "Science Fiction",
+
+    "description":
+    "A science fiction survival story involving space.",
+
+    "published_year": 2021,
+
+    "embedding":
+    [
+        0.93,
+        0.82,
+        0.12
+    ]
+}
+
+
+Expected:
+
+    201 Created
+
+
+--------------------------------------------------------------------
+TEST 6 – INVALID POST
+--------------------------------------------------------------------
+
+Method:
+
+    POST
+
+URL:
+
+    http://localhost:3000/v1/books
+
+
+Body:
+
+{
+    "title": "Test Book"
+}
+
+
+Expected:
+
+    400 Bad Request
+
+
+Response:
+
+{
+    "error": {
+
+        "code":
+        "INVALID_BOOK",
+
+        "message":
+        "title, author and genre are required."
+
+    }
+}
+
+
+====================================================================
+PART 21 – VERIFY DATA AFTER POST
+====================================================================
+
+Go back to MySQL Workbench.
+
+Execute:
+
+SELECT
+    book_id,
+    title,
+    author,
+    genre,
+    published_year,
+    embedding
+FROM Books
+ORDER BY book_id;
+
+
+EXPECTED:
+
+The newly created book should appear:
+
+    book_id = 11
+
+    title = Project Hail Mary
+
+    author = Andy Weir
+
+    genre = Science Fiction
+
+    embedding = [0.93,0.82,0.12]
+
+
+====================================================================
+PART 22 – VERIFY REST CONSTRAINTS
+====================================================================
+
+REQUIREMENT 1 – STATELESSNESS
+------------------------------
+
+The API is stateless.
+
+The server does not store a user's previous search session.
+
+Each request contains the information required to process it.
+
+Example:
+
+    GET /v1/books/search?q=Stories%20about%20space&limit=3
+
+
+The request can be processed independently.
+
+
+--------------------------------------------------------------------
+REQUIREMENT 2 – GET
+--------------------------------------------------------------------
+
+GET is used for retrieving/searching books.
+
+Correct:
+
+    GET /v1/books/search
+
+
+GET does not create a book.
+
+
+--------------------------------------------------------------------
+REQUIREMENT 3 – POST
+--------------------------------------------------------------------
+
+POST is used for creating a new book.
+
+Correct:
+
+    POST /v1/books
+
+
+POST creates a new database record.
+
+
+--------------------------------------------------------------------
+REQUIREMENT 4 – HTTP STATUS CODES
+--------------------------------------------------------------------
+
+Successful search:
+
+    200 OK
+
+
+Successful creation:
+
+    201 Created
+
+
+Invalid request:
+
+    400 Bad Request
+
+
+Server error:
+
+    500 Internal Server Error
+
+
+====================================================================
+PART 23 – COMPLETE EXECUTION ORDER
+====================================================================
+
+STEP 1
+------
+
+Start MySQL Server.
+
+
+STEP 2
+------
+
+Open MySQL Workbench.
+
+
+STEP 3
+------
+
+Create:
+
+    bookflow_db
+
+
+STEP 4
+------
+
+Create:
+
+    Books
+
+
+STEP 5
+------
+
+Insert:
+
+    10 books
+
+
+STEP 6
+------
+
+Add:
+
+    embedding JSON
+
+
+STEP 7
+------
+
+Insert:
+
+    10 mock vectors
+
+
+STEP 8
+------
+
+Run L2 query.
+
+
+Expected top 3:
+
+    The Martian
+    Enders Game
+    Dune
+
+
+STEP 9
+------
+
+Run cosine query.
+
+
+Expected top 3:
+
+    The Martian
+    Enders Game
+    Dune
+
+
+STEP 10
+------
+
+Install Node.js.
+
+
+STEP 11
+------
+
+Create:
+
+    package.json
+
+    server.js
+
+
+STEP 12
+------
+
+Run:
+
+    npm install
+
+
+STEP 13
+------
+
+Enter MySQL password in server.js.
+
+
+STEP 14
+------
+
+Run:
+
+    node server.js
+
+
+Expected:
+
+    BookFlow API running at
+    http://localhost:3000
+
+
+STEP 15
+------
+
+Open Swagger Editor:
+
+    https://editor.swagger.io/
+
+
+STEP 16
+------
+
+Paste the OpenAPI YAML.
+
+
+STEP 17
+------
+
+Check:
+
+    GET /v1/books/search
+
+    POST /v1/books
+
+
+STEP 18
+------
+
+Swagger:
+
+    Try it out
+    GET
+    q = Stories about space
+    limit = 3
+    Execute
+
+
+Expected:
+
+    200 OK
+
+
+STEP 19
+------
+
+Open Postman.
+
+
+STEP 20
+------
+
+Test:
+
+    GET /
+
+
+Expected:
+
+    200 OK
+
+
+STEP 21
+------
+
+Test:
+
+    GET /v1/books/search
+
+
+Expected:
+
+    200 OK
+
+
+STEP 22
+------
+
+Test missing q.
+
+
+Expected:
+
+    400 Bad Request
+
+
+STEP 23
+------
+
+Test POST.
+
+
+Expected:
+
+    201 Created
+
+
+STEP 24
+------
+
+Test invalid POST.
+
+
+Expected:
+
+    400 Bad Request
+
+
+====================================================================
+PART 24 – FINAL PROJECT STRUCTURE
+====================================================================
+
+BookFlow_Intelligent_Catalog
+|
+|--- BookFlow_MySQL.sql
+|
+|--- BookFlow_API
+|       |
+|       |--- package.json
+|       |
+|       |--- server.js
+|       |
+|       |--- openapi.yaml
+|
+|--- BookFlow_Intelligent_Catalog.txt
+
+
+====================================================================
+PART 25 – FINAL OUTPUT
+====================================================================
+
+DATABASE:
+
+    bookflow_db
+
+
+TABLE:
+
+    Books
+
+
+MOCK VECTOR:
+
+    [0.90, 0.80, 0.20]
+
+
+L2 SEARCH:
+
+    Top 3:
+
+        1. The Martian
+        2. Enders Game
+        3. Dune
+
+
+COSINE SEARCH:
+
+    Top 3:
+
+        1. The Martian
+        2. Enders Game
+        3. Dune
+
+
+REST API:
+
+    GET /v1/books/search
+
+    POST /v1/books
+
+
+SEARCH:
+
+    q
+    limit
+
+
+HTTP RESULTS:
+
+    200 OK
+    201 Created
+    400 Bad Request
+    500 Internal Server Error
+
+
+API DOCUMENTATION:
+
+    Swagger Editor
+
+
+API TESTING:
+
+    Postman
+
+
+DATABASE TESTING:
+
+    MySQL Workbench
+
+
+BACKEND:
+
+    Node.js + Express
+
+
+====================================================================
+END OF PRACTICAL
+====================================================================
